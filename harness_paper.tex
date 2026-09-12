@@ -7,6 +7,7 @@
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
@@ -72,19 +73,19 @@ This is the structure of the remainder of the paper: the literature review is co
 A recent line of work argues that agent capability is determined less by the model than by the \emph{harness}: the stateful program that determines what information is stored, retrieved, and presented to the model at each step. The Externalization review \cite{b1} organizes this design space into memory (state across time), skills (procedural expertise), protocols (interaction rules), and the harness that makes these modules reliable in practice. Meta-Harness \cite{b2} goes further and shows that harnesses themselves can be optimized: an outer-loop proposer reads a filesystem of prior harness code, execution traces, and scores, and iteratively proposes new harnesses, outperforming prior hand-designed and text-optimization baselines. Our work applies this lens to document extraction, where the harness must additionally manage a \emph{schema} (the target structure), a \emph{confidence model} (when to trust the extraction), and a \emph{correction policy} (what to do when confidence is low).
 
 \subsection{Schema-Guided Structured Extraction}
-Structured outputs constrain a model to emit JSON conforming to a provided JSON Schema, which is ideal for data extraction and classification \cite{b4}. Schema guidance gives two distinct benefits: it guarantees parseable output and it focuses the model's attention on exactly the fields the application needs. In our design the schema is part of the harness---it is an optimizable artifact rather than a fixed input. Layout-aware pretrained models remain a strong, well-established reference point for the SROIE key-information-extraction task: LayoutLM reports an entity-level F1 of 95.24\% \cite{b8}, and LayoutLMv2 reports 97.81\% \cite{b9} on SROIE Task 3, both after task-specific fine-tuning on labeled training splits. More recently, prompted VLMs without any task-specific fine-tuning have been evaluated directly on scanned receipt/invoice extraction: a 2025 benchmark of Gemini-based structured extraction reports 87.46\% accuracy on scanned receipts \cite{b10}, which is the closest published analogue to our zero-fine-tuning, schema-guided setting and gives an independent sense of the accuracy range a frozen VLM harness should land in.
+Structured outputs constrain a model to emit JSON conforming to a provided JSON Schema, which is ideal for data extraction and classification \cite{b4}. Their reliability has itself become a benchmark target \cite{b30}, and grammar-constrained decoding can introduce structure-specific failure modes rather than only removing formatting errors \cite{b31}. Schema guidance gives two distinct benefits: it guarantees parseable output and it focuses the model's attention on exactly the fields the application needs. In our design the schema is part of the harness---it is an optimizable artifact rather than a fixed input. Layout-aware pretrained models remain a strong, well-established reference point for the SROIE key-information-extraction task: LayoutLM reports an entity-level F1 of 95.24\% \cite{b8}, and LayoutLMv2 reports 97.81\% \cite{b9} on SROIE Task 3, both after task-specific fine-tuning on labeled training splits. More recently, prompted VLMs without any task-specific fine-tuning have been evaluated directly on scanned receipt/invoice extraction: a 2025 benchmark of Gemini-based structured extraction reports 87.46\% accuracy on scanned receipts \cite{b10}, which is the closest published analogue to our zero-fine-tuning, schema-guided setting and gives an independent sense of the accuracy range a frozen VLM harness should land in.
 
 \subsection{Confidence Estimation and Calibration}
-Because commodity APIs rarely expose token-level log-probabilities, confidence must be estimated from observable signals. Self-consistency \cite{b5} samples a model multiple times and treats agreement across samples as a proxy for confidence; it is widely used to improve reasoning accuracy. However, agreement-based confidence is not automatically calibrated: the fraction of samples agreeing on a value is not the same as the probability that the value is correct. Expected calibration error (ECE) \cite{b6} quantifies this gap and is the metric we adopt to measure the quality of the confidence signal. Reported ECE for self-consistency-derived confidence in the LLM literature spans roughly 0.075--0.35 depending on task and baseline, and is generally found to be better calibrated than single-sample verbalized confidence, though still an imperfect probability estimate \cite{b11}.
+Because commodity APIs rarely expose token-level log-probabilities, confidence must be estimated from observable signals. Self-consistency \cite{b5} samples a model multiple times and treats agreement across samples as a proxy for confidence; it is widely used to improve reasoning accuracy, and the same agreement signal underlies black-box hallucination detectors such as SelfCheckGPT \cite{b12} and semantic-entropy estimators \cite{b13}. However, agreement-based confidence is not automatically calibrated: the fraction of samples agreeing on a value is not the same as the probability that the value is correct. Expected calibration error (ECE) \cite{b6} quantifies this gap and is the metric we adopt to measure the quality of the confidence signal; recent surveys catalogue the broader space of LLM uncertainty-quantification methods and their computational trade-offs \cite{b18,b19}. Reported ECE for self-consistency-derived confidence in the LLM literature spans roughly 0.075--0.35 depending on task and baseline, and is generally found to be better calibrated than single-sample verbalized confidence, though still an imperfect probability estimate \cite{b11}. Verbalized confidence---asking the model to state its own certainty---is the main alternative \cite{b14,b15}, but it too is miscalibrated in multimodal settings \cite{b20,b21}, which is directly relevant to our vision-based extraction setting.
 
 \subsection{Self-Correction}
-LLM self-refinement---asking a model to critique and regenerate its own output---has produced mixed results. Huang et al.\ \cite{b3} show that \emph{intrinsic} self-correction, performed without any external feedback signal, can substantially regress accuracy: GPT-3.5 drops from 75.8\% to 41.8\% on CommonSenseQA after a single self-correction round, and GPT-4 drops from 95.5\% to 89.0\% on GSM8K. The same study shows that correction guided by an external or oracle signal instead \emph{improves} accuracy (e.g., GPT-3.5 on CommonSenseQA rises from 75.8\% to 89.7\%), indicating that the failure mode is specifically \emph{blind, unguided} correction rather than correction itself. Our design therefore restricts correction to \emph{targeted re-reading of only the low-confidence fields identified by self-consistency}---an external, measurable signal rather than the model's own unguided judgment---which is a narrower and more auditable operation than full blind regeneration.
+LLM self-refinement---asking a model to critique and regenerate its own output---has produced mixed results. Huang et al.\ \cite{b3} show that \emph{intrinsic} self-correction, performed without any external feedback signal, can substantially regress accuracy: GPT-3.5 drops from 75.8\% to 41.8\% on CommonSenseQA after a single self-correction round, and GPT-4 drops from 95.5\% to 89.0\% on GSM8K. The same study shows that correction guided by an external or oracle signal instead \emph{improves} accuracy (e.g., GPT-3.5 on CommonSenseQA rises from 75.8\% to 89.7\%), indicating that the failure mode is specifically \emph{blind, unguided} correction rather than correction itself. Our design therefore restricts correction to \emph{targeted re-reading of only the low-confidence fields identified by self-consistency}---an external, measurable signal rather than the model's own unguided judgment---which is a narrower and more auditable operation than full blind regeneration. This matters because the aggregate that triggers correction is a plurality vote, and recent work shows majority voting can itself degrade per-problem accuracy when sampling errors are correlated rather than independent \cite{b22}; minority disagreements that plurality voting discards nonetheless carry usable uncertainty signal \cite{b23}, which is the signal our confidence gate is meant to exploit.
 
 \section{Dataset and Schema Design}
 \label{sec:data}
 
 \subsection{The SROIE Dataset}
-We evaluate on the SROIE (Scanned Receipt OCR and Information Extraction) benchmark from ICDAR 2019 \cite{b7}, a widely used public dataset of real scanned receipts in English. Each receipt is annotated with four key-value fields: company, date, address, and total. SROIE is well suited to harness research because it is small (hundreds of documents), has dense, unambiguous labels, and represents the classic document-intelligence workload of converting a noisy scanned image into structured records. Two example receipts from our evaluation split are shown in Fig.~\ref{fig:receipts}.
+We evaluate on the SROIE (Scanned Receipt OCR and Information Extraction) benchmark from ICDAR 2019 \cite{b7}, a widely used public dataset of real scanned receipts in English. Each receipt is annotated with four key-value fields: company, date, address, and total. SROIE is well suited to harness research because it is small (hundreds of documents), has dense, unambiguous labels, and represents the classic document-intelligence workload of converting a noisy scanned image into structured records. It sits within a broader movement toward end-to-end visual document understanding, from OCR-free models such as Donut \cite{b24} to the DocVQA benchmark \cite{b27}, with OCRBench \cite{b25} now tracking large multimodal models specifically on visual text localization and key-information extraction. Generative information extraction with LLMs is surveyed in \cite{b28}, and invoice-specific extraction benchmarks appear in \cite{b29}. Two example receipts from our evaluation split are shown in Fig.~\ref{fig:receipts}.
 
 \begin{figure*}[htb]
 \centerline{\includegraphics[width=3.2in,height=2.2in,keepaspectratio]{fig/receipt_sample_a.jpg}\hspace{0.15in}\includegraphics[width=3.2in,height=2.2in,keepaspectratio]{fig/receipt_sample_b.jpg}}
@@ -265,7 +266,7 @@ On the 50 documents, Variant C is numerically identical to Variant B (Table~\ref
 \end{figure}
 
 \subsection{Cost and Quota-Awareness}
-Variant C costs at most \(N + 1\) calls per document (\(N\) samples plus up to one correction call) compared to one call for the baseline; Variant B pays a fixed \(3\times\) call budget over Variant A for the (currently indistinguishable) accuracy in Table~\ref{tab:results}. Commodity free-tier API quotas impose a strict daily ceiling on image-generation calls, and self-consistency's \(N\times\) call multiplier consumes that budget quickly, which is why the experimental harness is cache-first with retry/backoff on transient quota errors (Section~\ref{sec:expsetup})---every successful response is persisted so a run can be resumed without re-spending calls. This is itself research-relevant: it motivates a budget-aware harness that spends extra calls only when confidence is low and the document is hard, rather than always paying the full \(N\)-sample cost.
+Variant C costs at most \(N + 1\) calls per document (\(N\) samples plus up to one correction call) compared to one call for the baseline; Variant B pays a fixed \(3\times\) call budget over Variant A for the (currently indistinguishable) accuracy in Table~\ref{tab:results}. Commodity free-tier API quotas impose a strict daily ceiling on image-generation calls, and self-consistency's \(N\times\) call multiplier consumes that budget quickly, which is why the experimental harness is cache-first with retry/backoff on transient quota errors (Section~\ref{sec:expsetup})---every successful response is persisted so a run can be resumed without re-spending calls. This is itself research-relevant: it motivates a budget-aware harness that spends extra calls only when confidence is low and the document is hard, rather than always paying the full \(N\)-sample cost. This is a harness-level instance of the inference-scaling problem: compute-optimal test-time strategies allocate samples according to problem difficulty and can substantially outperform uniform best-of-\(N\) \cite{b32}.
 
 \section{Conclusion and Future Works}
 \label{sec:conclusion}
@@ -278,7 +279,7 @@ The harness perspective offers a clear path to further improvements. The modular
     \item Lower the confidence threshold \(\tau\) or increase \(N\) so that the correction step is actually exercised, to empirically test whether our confidence-gated correction behaves like the oracle-guided (beneficial) or intrinsic (harmful) regime in \cite{b3}.
     \item Compare self-consistency confidence against verbalized confidence and an external verifier model, and add a calibration layer on a held-out development set to correct the non-monotonicity observed in Section~\ref{sec:results}.
     \item Add a date/amount normalizer so that semantically correct near-miss extractions (e.g., the \texttt{RM}-prefix convention observed in Section~\ref{sec:results}) are not penalized by exact-match metrics.
-    \item Simulate a human-review policy that routes low-confidence documents to a reviewer, quantifying the reliability gain per human intervention.
+    \item Simulate a human-review policy that routes low-confidence documents to a reviewer, quantifying the reliability gain per human intervention as a selective-prediction risk--coverage trade-off \cite{b16}.
     \item Explore schema evolution: measure how extraction reliability changes as the target schema grows in size and complexity.
 \end{itemize}
 
@@ -304,6 +305,44 @@ The harness perspective offers a clear path to further improvements. The modular
 \bibitem{b10} ``Multi-modal vision vs.\ text-based parsing: Benchmarking LLM strategies for invoice processing,'' arXiv preprint arXiv:2509.04469, 2025.
 
 \bibitem{b11} ``Self-consistency boosts calibration for math reasoning,'' arXiv preprint arXiv:2403.09849, 2024.
+
+\bibitem{b12} P.~Manakul, A.~Liusie, and M.~J.~F.~Gales, ``SelfCheckGPT: Zero-resource black-box hallucination detection for generative large language models,'' in \emph{EMNLP}, 2023.
+
+\bibitem{b13} S.~Farquhar, J.~Kossen, L.~Kuhn, and Y.~Gal, ``Detecting hallucinations in large language models using semantic entropy,'' \emph{Nature}, vol.~630, pp.~625--630, 2024.
+
+\bibitem{b14} S.~Lin, J.~Hilton, and O.~Evans, ``Teaching models to express their uncertainty in words,'' \emph{TMLR}, 2022.
+
+\bibitem{b15} S.~Kadavath et al., ``Language models (mostly) know what they know,'' arXiv preprint arXiv:2207.05221, 2022.
+
+\bibitem{b16} Y.~Geifman and R.~El-Yaniv, ``Selective classification for deep neural networks,'' in \emph{NeurIPS}, 2017.
+
+\bibitem{b18} X.~Liu, T.~Chen, L.~Da, C.~Chen, Z.~Lin, and H.~Wei, ``Uncertainty quantification and confidence calibration in large language models: A survey,'' arXiv preprint arXiv:2503.15850, 2025.
+
+\bibitem{b19} C.~Hobelsberger, T.~Winner, A.~Nawroth, O.~Mitevski, and A.~Haensch, ``Systematic evaluation of uncertainty estimation methods in large language models,'' arXiv preprint arXiv:2510.20460, 2025.
+
+\bibitem{b20} Z.~Chen, W.~Hu, G.~He, Z.~Deng, Z.~Zhang, and R.~Hong, ``Unveiling uncertainty: A deep dive into calibration and performance of multimodal large language models,'' in \emph{COLING}, 2025.
+
+\bibitem{b21} W.~Xuan, Q.~Zeng, H.~Qi, J.~Wang, and N.~Yokoya, ``Seeing is believing, but how much? A comprehensive analysis of verbalized calibration in vision-language models,'' arXiv preprint arXiv:2505.20236, 2025.
+
+\bibitem{b22} U.~Bahuguna, ``When self-consistency backfires: Majority vote hurts the majority of hard science problems for small LLMs,'' arXiv preprint arXiv:2608.11403, 2026.
+
+\bibitem{b23} S.~Huang, Z.~Ma, J.~Du, C.~Meng, W.~Wang, and Z.~Lin, ``Mirror-Consistency: Harnessing inconsistency in majority voting,'' in \emph{Findings of EMNLP}, 2024.
+
+\bibitem{b24} G.~Kim et al., ``OCR-free document understanding transformer,'' in \emph{ECCV}, 2022.
+
+\bibitem{b25} Y.~Liu et al., ``OCRBench: On the hidden mystery of OCR in large multimodal models,'' arXiv preprint arXiv:2305.07895, 2023.
+
+\bibitem{b27} M.~Mathew, D.~Karatzas, and C.~V.~Jawahar, ``DocVQA: A dataset for VQA on document images,'' in \emph{WACV}, 2021.
+
+\bibitem{b28} D.~Xu et al., ``Large language models for generative information extraction: A survey,'' \emph{Frontiers of Computer Science}, 2024.
+
+\bibitem{b29} S.~Yashwant, A.~Dubey, P.~Paikray, and G.~Thulsiram, ``Invoice information extraction: Methods and performance evaluation,'' arXiv preprint arXiv:2510.15727, 2025.
+
+\bibitem{b30} S.~Geng et al., ``JSONSchemaBench: A rigorous benchmark of structured outputs for language models,'' arXiv preprint arXiv:2501.10868, 2025.
+
+\bibitem{b31} H.~Zhou, ``From hallucination to structure snowballing: The alignment tax of constrained decoding in LLM reflection,'' arXiv preprint arXiv:2604.06066, 2026.
+
+\bibitem{b32} C.~Snell, J.~Lee, K.~Xu, and A.~Kumar, ``Scaling LLM test-time compute optimally can be more effective than scaling model parameters,'' arXiv preprint arXiv:2408.03314, 2024.
 
 \end{thebibliography}
 
